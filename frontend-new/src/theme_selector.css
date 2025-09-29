@@ -1,0 +1,48 @@
+/* Place your CSS styles for theme selector here */
+.theme-selector {
+  position: relative;
+  display: inline-block;
+}
+
+.theme-toggle-btn {
+  padding: 8px 16px;
+  font-size: 16px;
+  cursor: pointer;
+  background: var(--button-bg, #fff);
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.theme-options {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.theme-options.open {
+  display: block;
+}
+
+.theme-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-left: 4px solid transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.theme-btn.active {
+  background: #f0f0f0;
+  font-weight: bold;
+}
