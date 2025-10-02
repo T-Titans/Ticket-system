@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import API from '../api';
+import axios from 'axios';
 
 const TicketForm = ({ onCreated }) => {
   const [title, setTitle] = useState('');
