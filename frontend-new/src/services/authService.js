@@ -1,74 +1,37 @@
-﻿const API_URL = 'http://localhost:5001/api';
+﻿import axios from 'axios';
+import API_BASE_URL from '../config/api';
 
-const authService = {
-  async register(userData) {
+export const authService = {
+  login: async (email, password) => {
     try {
-      const response = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+        email,
+        password
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Registration failed');
-      }
-
-      return { success: true, ...data };
+      return response.data;
     } catch (error) {
-      console.error('Registration error:', error);
-      throw error;
+      throw error.response?.data || error;
     }
   },
 
-  async login(email, password) {
+  register: async (userData) => {
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
-      }
-
-      if (data.token) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-      }
-
-      return { success: true, ...data };
+      const response = await axios.post(`${API_BASE_URL}/auth/register`, userData);
+      return response.data;
     } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+      throw error.response?.data || error;
     }
   },
 
-  async logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-  },
-
-  getCurrentUser() {
-    const userStr = localStorage.getItem('user');
-    return userStr ? JSON.parse(userStr) : null;
-  },
-
-  getToken() {
-    return localStorage.getItem('token');
-  },
-
-  isAuthenticated() {
-    return !!this.getToken();
+  getCurrentUser: async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
   }
 };
-
-export default authService;

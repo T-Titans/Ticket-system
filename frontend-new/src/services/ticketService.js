@@ -1,6 +1,5 @@
 ﻿import axios from 'axios';
-
-const API_URL = 'http://localhost:5001/api';
+import API_BASE_URL from '../config/api';
 
 const getAuthHeader = () => {
   const token = localStorage.getItem('token');
@@ -8,11 +7,10 @@ const getAuthHeader = () => {
 };
 
 export const ticketService = {
-  // Get all tickets
   getAllTickets: async (filters = {}) => {
     try {
       const params = new URLSearchParams(filters).toString();
-      const response = await axios.get(`${API_URL}/tickets?${params}`, {
+      const response = await axios.get(`${API_BASE_URL}/tickets?${params}`, {
         headers: getAuthHeader()
       });
       return response.data;
@@ -21,10 +19,9 @@ export const ticketService = {
     }
   },
 
-  // Get ticket by ID
   getTicketById: async (id) => {
     try {
-      const response = await axios.get(`${API_URL}/tickets/${id}`, {
+      const response = await axios.get(`${API_BASE_URL}/tickets/${id}`, {
         headers: getAuthHeader()
       });
       return response.data;
@@ -33,10 +30,9 @@ export const ticketService = {
     }
   },
 
-  // Create ticket
   createTicket: async (ticketData) => {
     try {
-      const response = await axios.post(`${API_URL}/tickets`, ticketData, {
+      const response = await axios.post(`${API_BASE_URL}/tickets`, ticketData, {
         headers: getAuthHeader()
       });
       return response.data;
@@ -45,10 +41,9 @@ export const ticketService = {
     }
   },
 
-  // Update ticket
   updateTicket: async (id, updates) => {
     try {
-      const response = await axios.put(`${API_URL}/tickets/${id}`, updates, {
+      const response = await axios.put(`${API_BASE_URL}/tickets/${id}`, updates, {
         headers: getAuthHeader()
       });
       return response.data;
@@ -57,10 +52,9 @@ export const ticketService = {
     }
   },
 
-  // Assign ticket
   assignTicket: async (id, assigned_to) => {
     try {
-      const response = await axios.patch(`${API_URL}/tickets/${id}/assign`, 
+      const response = await axios.patch(`${API_BASE_URL}/tickets/${id}/assign`, 
         { assigned_to }, 
         { headers: getAuthHeader() }
       );
@@ -70,10 +64,9 @@ export const ticketService = {
     }
   },
 
-  // Delete ticket
   deleteTicket: async (id) => {
     try {
-      const response = await axios.delete(`${API_URL}/tickets/${id}`, {
+      const response = await axios.delete(`${API_BASE_URL}/tickets/${id}`, {
         headers: getAuthHeader()
       });
       return response.data;
@@ -82,10 +75,9 @@ export const ticketService = {
     }
   },
 
-  // Get ticket stats
   getTicketStats: async (user_id, role) => {
     try {
-      const response = await axios.get(`${API_URL}/tickets/stats`, {
+      const response = await axios.get(`${API_BASE_URL}/tickets/stats`, {
         params: { user_id, role },
         headers: getAuthHeader()
       });
@@ -95,11 +87,10 @@ export const ticketService = {
     }
   },
 
-  // Add comment
   addComment: async (ticketId, user_id, comment) => {
     try {
       const response = await axios.post(
-        `${API_URL}/tickets/${ticketId}/comments`,
+        `${API_BASE_URL}/tickets/${ticketId}/comments`,
         { user_id, comment },
         { headers: getAuthHeader() }
       );
@@ -109,11 +100,10 @@ export const ticketService = {
     }
   },
 
-  // Get comments
   getComments: async (ticketId) => {
     try {
       const response = await axios.get(
-        `${API_URL}/tickets/${ticketId}/comments`,
+        `${API_BASE_URL}/tickets/${ticketId}/comments`,
         { headers: getAuthHeader() }
       );
       return response.data;
