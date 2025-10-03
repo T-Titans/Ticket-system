@@ -1,380 +1,351 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useCapacitiTheme } from '../contexts/CapacitiThemeContext';
+import DashboardThemeSelector from '../components/DashboardThemeSelector';
+import CapacitiThemeToggle from '../components/CapacitiThemeToggle';
+import '../components/DashboardThemes.css';
 
-function Dashboard() {
-  const [tickets, setTickets] = useState([]);
-  const [assets, setAssets] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeView, setActiveView] = useState('overview');
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+const Dashboard = () => {
+  const { user } = useAuth();
+  const { isDarkMode } = useCapacitiTheme();
+  const [currentTheme, setCurrentTheme] = useState('leopard-pro');
+  const [stats, setStats] = useState({
+    totalTickets: 0,
+    openTickets: 0,
+    resolvedTickets: 0,
+    inProgress: 0
+  });
 
   useEffect(() => {
-    // Mock tech-specific data
-    const mockTickets = [
-      {
-        id: 'TK-001',
-        title: 'Windows 11 BSOD Error',
-        description: 'Computer crashes with blue screen - Driver Power State Failure',
-        category: 'Hardware',
-        subcategory: 'Desktop Computer',
-        status: 'Open',
-        priority: 'High',
-        assignedTo: 'John Smith',
-        requester: 'Sarah Johnson',
-        department: 'Finance',
-        deskNumber: 'F-205',
-        dateCreated: '2025-09-28',
-        lastUpdate: '2025-09-28 10:30',
-        tags: ['BSOD', 'Windows 11', 'Driver Issue'],
-        assetTag: 'DT-F205-001'
-      },
-      {
-        id: 'TK-002',
-        title: 'WiFi Connection Dropping',
-        description: 'Laptop constantly disconnects from corporate WiFi network',
-        category: 'Network',
-        subcategory: 'Wireless Connectivity',
-        status: 'In Progress',
-        priority: 'Medium',
-        assignedTo: 'Mike Wilson',
-        requester: 'David Brown',
-        department: 'Marketing',
-        deskNumber: 'M-101',
-        dateCreated: '2025-09-27',
-        lastUpdate: '2025-09-28 09:15',
-        tags: ['WiFi', 'Network', 'Laptop'],
-        assetTag: 'LT-M101-003'
-      },
-      {
-        id: 'TK-003',
-        title: 'Adobe Creative Suite License Expired',
-        description: 'Need license renewal for Photoshop and Illustrator',
-        category: 'Software',
-        subcategory: 'License Management',
-        status: 'Pending Approval',
-        priority: 'Medium',
-        assignedTo: 'Lisa Chen',
-        requester: 'Tom Anderson',
-        department: 'Design',
-        deskNumber: 'D-301',
-        dateCreated: '2025-09-26',
-        lastUpdate: '2025-09-27 16:45',
-        tags: ['Adobe', 'License', 'Software'],
-        assetTag: 'SW-ADOBE-001'
-      },
-      {
-        id: 'TK-004',
-        title: 'Printer Not Responding',
-        description: 'HP LaserJet printer showing offline status, cannot print documents',
-        category: 'Hardware',
-        subcategory: 'Printer',
-        status: 'Resolved',
-        priority: 'Low',
-        assignedTo: 'Alex Rodriguez',
-        requester: 'Emma Davis',
-        department: 'HR',
-        deskNumber: 'HR-105',
-        dateCreated: '2025-09-25',
-        lastUpdate: '2025-09-26 14:20',
-        tags: ['Printer', 'HP', 'Network Printer'],
-        assetTag: 'PR-HR105-001'
-      }
-    ];
+    // Load saved theme
+    const savedTheme = localStorage.getItem('dashboard-theme');
+    if (savedTheme) {
+      setCurrentTheme(savedTheme);
+    }
 
-    const mockAssets = [
-      { type: 'Desktops', count: 125, status: 'Active' },
-      { type: 'Laptops', count: 89, status: 'Active' },
-      { type: 'Printers', count: 45, status: 'Mixed' },
-      { type: 'Servers', count: 12, status: 'Critical' },
-      { type: 'Network Equipment', count: 67, status: 'Active' },
-      { type: 'Mobile Devices', count: 156, status: 'Active' }
-    ];
-
+    // Simulate loading stats
     setTimeout(() => {
-      setTickets(mockTickets);
-      setAssets(mockAssets);
-      setIsLoading(false);
+      setStats({
+        totalTickets: 142,
+        openTickets: 28,
+        resolvedTickets: 98,
+        inProgress: 16
+      });
     }, 1000);
   }, []);
 
-  const stats = {
-    totalTickets: tickets.length,
-    openTickets: tickets.filter(t => t.status === 'Open').length,
-    inProgressTickets: tickets.filter(t => t.status === 'In Progress').length,
-    resolvedTickets: tickets.filter(t => t.status === 'Resolved').length,
-    highPriorityTickets: tickets.filter(t => t.priority === 'High').length,
-    averageResolutionTime: '4.2 hours',
-    slaCompliance: '94.5%'
+  const handleThemeChange = (themeId) => {
+    setCurrentTheme(themeId);
   };
 
-  if (isLoading) {
-    return (
-      <div className="tech-loading">
-        <div className="loading-spinner"></div>
-        <h2>Loading TechDesk Dashboard...</h2>
-        <p>Initializing your IT support environment</p>
-      </div>
-    );
-  }
+  const getRoleBasedGreeting = () => {
+    const hour = new Date().getHours();
+    const timeGreeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
+    
+    switch (user?.role) {
+      case 'it_specialist':
+        return `${timeGreeting}, ${user?.firstName}! 🛠️`;
+      case 'employee':
+        return `${timeGreeting}, ${user?.firstName}! 💼`;
+      case 'visitor':
+        return `${timeGreeting}, ${user?.firstName}! 👋`;
+      default:
+        return `${timeGreeting}! 🎉`;
+    }
+  };
+
+  const getRecentActivities = () => [
+    { id: 1, action: 'New ticket created', time: '2 minutes ago', type: 'ticket', icon: '🎫' },
+    { id: 2, action: 'Password reset completed', time: '15 minutes ago', type: 'security', icon: '🔐' },
+    { id: 3, action: 'System backup completed', time: '1 hour ago', type: 'system', icon: '💾' },
+    { id: 4, action: 'User account verified', time: '2 hours ago', type: 'user', icon: '✅' },
+    { id: 5, action: 'Network maintenance scheduled', time: '3 hours ago', type: 'maintenance', icon: '🔧' }
+  ];
+
+  const getQuickActions = () => {
+    const actions = [
+      { title: 'Create Ticket', icon: '➕', color: 'var(--dashboard-primary)', action: () => console.log('Create ticket') },
+      { title: 'View Reports', icon: '📊', color: '#3498db', action: () => console.log('View reports') },
+      { title: 'User Management', icon: '👥', color: '#27ae60', action: () => console.log('User management') },
+      { title: 'System Settings', icon: '⚙️', color: '#8e44ad', action: () => console.log('Settings') }
+    ];
+
+    if (user?.role === 'visitor') {
+      return actions.slice(0, 2);
+    }
+    if (user?.role === 'employee') {
+      return actions.slice(0, 3);
+    }
+    return actions;
+  };
 
   return (
-    <div className="tech-dashboard">
-      <div className="dashboard-header">
-        <div className="header-info">
-          <h1>Welcome back, {user.firstName}! 👋</h1>
-          <div className="user-badge-container">
-            <span className="user-type-badge">{user.userType}</span>
-            <span className="department-badge">{user.department}</span>
-            <span className="location-badge">Desk: {user.deskNumber}</span>
+    <div className={`modern-dashboard theme-transition ${isDarkMode ? 'dark' : 'light'}`}>
+      {/* Dashboard Header */}
+      <header className="dashboard-header">
+        <div className="dashboard-title">
+          <div className="dashboard-logo">C</div>
+          <div>
+            <h1>Capaciti Dashboard</h1>
+            <p style={{ margin: 0, fontSize: '0.875rem', opacity: 0.7 }}>
+              Enterprise IT Management System
+            </p>
           </div>
         </div>
         
-        <div className="quick-actions">
-          <button className="quick-action-btn primary">
-            ➕ New Ticket
-          </button>
-          <button className="quick-action-btn secondary">
-            📊 View Reports
-          </button>
-          <button className="quick-action-btn secondary">
-            💻 Check Assets
-          </button>
+        <div className="dashboard-controls">
+          <DashboardThemeSelector 
+            currentTheme={currentTheme}
+            onThemeChange={handleThemeChange}
+          />
+          <CapacitiThemeToggle />
         </div>
-      </div>
+      </header>
 
-      <div className="dashboard-tabs">
-        <button 
-          className={`tab-btn ${activeView === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveView('overview')}
-        >
-          📊 Overview
-        </button>
-        <button 
-          className={`tab-btn ${activeView === 'tickets' ? 'active' : ''}`}
-          onClick={() => setActiveView('tickets')}
-        >
-          🎫 My Tickets ({tickets.length})
-        </button>
-        <button 
-          className={`tab-btn ${activeView === 'assets' ? 'active' : ''}`}
-          onClick={() => setActiveView('assets')}
-        >
-          💻 Assets
-        </button>
-        <button 
-          className={`tab-btn ${activeView === 'knowledge' ? 'active' : ''}`}
-          onClick={() => setActiveView('knowledge')}
-        >
-          📚 Knowledge Base
-        </button>
-      </div>
-
-      <div className="dashboard-content">
-        {activeView === 'overview' && (
-          <div className="overview-content">
-            <div className="stats-grid">
-              <div className="stat-card primary">
-                <div className="stat-icon">🎫</div>
-                <div className="stat-info">
-                  <h3>Total Tickets</h3>
-                  <span className="stat-number">{stats.totalTickets}</span>
-                  <span className="stat-change">+12% this week</span>
-                </div>
-              </div>
-              
-              <div className="stat-card warning">
-                <div className="stat-icon">🔥</div>
-                <div className="stat-info">
-                  <h3>High Priority</h3>
-                  <span className="stat-number">{stats.highPriorityTickets}</span>
-                  <span className="stat-change">Needs attention</span>
-                </div>
-              </div>
-              
-              <div className="stat-card success">
-                <div className="stat-icon">✅</div>
-                <div className="stat-info">
-                  <h3>SLA Compliance</h3>
-                  <span className="stat-number">{stats.slaCompliance}</span>
-                  <span className="stat-change">Above target</span>
-                </div>
-              </div>
-              
-              <div className="stat-card info">
-                <div className="stat-icon">⏱️</div>
-                <div className="stat-info">
-                  <h3>Avg Resolution</h3>
-                  <span className="stat-number">{stats.averageResolutionTime}</span>
-                  <span className="stat-change">-15 min improved</span>
-                </div>
-              </div>
+      {/* Dashboard Content */}
+      <main className="dashboard-content">
+        {/* Welcome Section */}
+        <div className="dashboard-card" style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: '700' }}>
+                {getRoleBasedGreeting()}
+              </h2>
+              <p style={{ margin: '0.5rem 0 0 0', opacity: 0.7 }}>
+                Welcome back to your {user?.role?.replace('_', ' ')} dashboard
+              </p>
             </div>
-
-            <div className="recent-activity">
-              <h2>🔄 Recent System Activity</h2>
-              <div className="activity-list">
-                <div className="activity-item">
-                  <div className="activity-icon hardware">🖥️</div>
-                  <div className="activity-content">
-                    <p><strong>Hardware Alert:</strong> Server CPU usage at 85%</p>
-                    <span className="activity-time">5 minutes ago</span>
-                  </div>
-                </div>
-                <div className="activity-item">
-                  <div className="activity-icon software">💿</div>
-                  <div className="activity-content">
-                    <p><strong>Software Update:</strong> Windows updates deployed to 45 machines</p>
-                    <span className="activity-time">15 minutes ago</span>
-                  </div>
-                </div>
-                <div className="activity-item">
-                  <div className="activity-icon network">🌐</div>
-                  <div className="activity-content">
-                    <p><strong>Network Event:</strong> WiFi access point rebooted successfully</p>
-                    <span className="activity-time">1 hour ago</span>
-                  </div>
-                </div>
+            <div style={{ 
+              padding: '1rem', 
+              background: 'var(--dashboard-gradient)', 
+              borderRadius: '16px',
+              color: 'white',
+              fontSize: '2rem'
+            }}>
+              {user?.role === 'it_specialist' ? '🛠️' : user?.role === 'employee' ? '💼' : '👤'}
+            </div>
+          </div>
+          
+          <div style={{ 
+            background: 'linear-gradient(135deg, rgba(var(--dashboard-primary), 0.1), rgba(var(--dashboard-secondary), 0.05))',
+            padding: '1rem',
+            borderRadius: '12px',
+            border: '1px solid rgba(var(--dashboard-primary), 0.2)'
+          }}>
+            <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--dashboard-primary)' }}>
+              ✅ System Status: All Systems Operational
+            </h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+              <div>
+                <span style={{ fontWeight: '600' }}>Frontend:</span>
+                <span style={{ color: '#27ae60', marginLeft: '0.5rem' }}>🟢 Online</span>
+              </div>
+              <div>
+                <span style={{ fontWeight: '600' }}>Backend:</span>
+                <span style={{ color: '#27ae60', marginLeft: '0.5rem' }}>🟢 Connected</span>
+              </div>
+              <div>
+                <span style={{ fontWeight: '600' }}>Database:</span>
+                <span style={{ color: '#27ae60', marginLeft: '0.5rem' }}>🟢 Supabase Active</span>
+              </div>
+              <div>
+                <span style={{ fontWeight: '600' }}>Auth:</span>
+                <span style={{ color: '#27ae60', marginLeft: '0.5rem' }}>🟢 Universal Login</span>
               </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {activeView === 'tickets' && (
-          <div className="tickets-content">
-            <div className="tickets-header">
-              <h2>🎫 My Support Tickets</h2>
-              <div className="tickets-filters">
-                <select className="filter-select">
-                  <option>All Categories</option>
-                  <option>Hardware</option>
-                  <option>Software</option>
-                  <option>Network</option>
-                  <option>Security</option>
-                </select>
-                <select className="filter-select">
-                  <option>All Priorities</option>
-                  <option>Critical</option>
-                  <option>High</option>
-                  <option>Medium</option>
-                  <option>Low</option>
-                </select>
-              </div>
+        {/* Stats Grid */}
+        <div className="dashboard-stats-grid">
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="stat-title">Total Tickets</h3>
+              <div className="stat-icon">🎫</div>
             </div>
+            <p className="stat-value">{stats.totalTickets}</p>
+            <p className="stat-change positive">+12% this month</p>
+          </div>
 
-            <div className="tickets-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ticket ID</th>
-                    <th>Title</th>
-                    <th>Category</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Assigned To</th>
-                    <th>Last Update</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tickets.map(ticket => (
-                    <tr key={ticket.id}>
-                      <td className="ticket-id">{ticket.id}</td>
-                      <td className="ticket-title">
-                        <strong>{ticket.title}</strong>
-                        <div className="ticket-tags">
-                          {ticket.tags.map(tag => (
-                            <span key={tag} className="tag">{tag}</span>
-                          ))}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`category-badge ${ticket.category.toLowerCase()}`}>
-                          {ticket.category}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`priority-badge ${ticket.priority.toLowerCase()}`}>
-                          {ticket.priority}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`status-badge ${ticket.status.toLowerCase().replace(' ', '-')}`}>
-                          {ticket.status}
-                        </span>
-                      </td>
-                      <td>{ticket.assignedTo}</td>
-                      <td>{ticket.lastUpdate}</td>
-                      <td>
-                        <div className="action-buttons">
-                          <button className="action-btn view">👁️</button>
-                          <button className="action-btn edit">✏️</button>
-                          <button className="action-btn comment">💬</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="stat-title">Open Tickets</h3>
+              <div className="stat-icon">📋</div>
+            </div>
+            <p className="stat-value">{stats.openTickets}</p>
+            <p className="stat-change negative">-5% from last week</p>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="stat-title">Resolved Tickets</h3>
+              <div className="stat-icon">✅</div>
+            </div>
+            <p className="stat-value">{stats.resolvedTickets}</p>
+            <p className="stat-change positive">+18% this month</p>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-header">
+              <h3 className="stat-title">In Progress</h3>
+              <div className="stat-icon">⚡</div>
+            </div>
+            <p className="stat-value">{stats.inProgress}</p>
+            <p className="stat-change positive">+3% from yesterday</p>
+          </div>
+        </div>
+
+        {/* Main Content Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
+          
+          {/* Quick Actions */}
+          <div className="dashboard-card">
+            <h3>Quick Actions</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+              {getQuickActions().map((action, index) => (
+                <button
+                  key={index}
+                  className="dashboard-action-btn"
+                  onClick={action.action}
+                  style={{ background: `linear-gradient(135deg, ${action.color}, ${action.color}dd)` }}
+                >
+                  <span style={{ fontSize: '1.25rem' }}>{action.icon}</span>
+                  {action.title}
+                </button>
+              ))}
             </div>
           </div>
-        )}
 
-        {activeView === 'assets' && (
-          <div className="assets-content">
-            <h2>💻 Asset Management</h2>
-            <div className="assets-grid">
-              {assets.map((asset, index) => (
-                <div key={index} className="asset-card">
-                  <div className="asset-header">
-                    <h3>{asset.type}</h3>
-                    <span className={`asset-status ${asset.status.toLowerCase()}`}>
-                      {asset.status}
-                    </span>
+          {/* Recent Activity */}
+          <div className="dashboard-card">
+            <h3>Recent Activity</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {getRecentActivities().map((activity) => (
+                <div
+                  key={activity.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    padding: '0.75rem',
+                    background: 'rgba(0, 0, 0, 0.02)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(0, 0, 0, 0.05)'
+                  }}
+                >
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: 'var(--dashboard-gradient)',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.25rem'
+                  }}>
+                    {activity.icon}
                   </div>
-                  <div className="asset-count">{asset.count}</div>
-                  <div className="asset-actions">
-                    <button className="asset-btn">View Details</button>
-                    <button className="asset-btn">Generate Report</button>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontWeight: '500' }}>{activity.action}</p>
+                    <p style={{ margin: 0, fontSize: '0.875rem', opacity: 0.7 }}>{activity.time}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        )}
 
-        {activeView === 'knowledge' && (
-          <div className="knowledge-content">
-            <h2>📚 IT Knowledge Base</h2>
-            <div className="knowledge-categories">
-              <div className="knowledge-card">
-                <div className="knowledge-icon">🖥️</div>
-                <h3>Hardware Troubleshooting</h3>
-                <p>Desktop, laptop, printer, and server issues</p>
-                <span className="article-count">45 articles</span>
+          {/* User Profile */}
+          <div className="dashboard-card">
+            <h3>Profile Information</h3>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              marginBottom: '1.5rem'
+            }}>
+              <div style={{
+                width: '60px',
+                height: '60px',
+                background: 'var(--dashboard-gradient)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: '1.5rem',
+                fontWeight: 'bold'
+              }}>
+                {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
               </div>
-              <div className="knowledge-card">
-                <div className="knowledge-icon">💿</div>
-                <h3>Software Solutions</h3>
-                <p>Application errors, license management, updates</p>
-                <span className="article-count">62 articles</span>
+              <div>
+                <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>
+                  {user?.firstName} {user?.lastName}
+                </p>
+                <p style={{ margin: 0, opacity: 0.7, textTransform: 'capitalize' }}>
+                  {user?.role?.replace('_', ' ')}
+                </p>
               </div>
-              <div className="knowledge-card">
-                <div className="knowledge-icon">🌐</div>
-                <h3>Network & Connectivity</h3>
-                <p>WiFi, VPN, firewall, and network configuration</p>
-                <span className="article-count">38 articles</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontWeight: '500' }}>Email:</span>
+                <span>{user?.email}</span>
               </div>
-              <div className="knowledge-card">
-                <div className="knowledge-icon">🔒</div>
-                <h3>Security & Access</h3>
-                <p>Password reset, permissions, security policies</p>
-                <span className="article-count">29 articles</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontWeight: '500' }}>Department:</span>
+                <span>{user?.department || 'N/A'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontWeight: '500' }}>User Type:</span>
+                <span style={{ textTransform: 'capitalize' }}>{user?.userType}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontWeight: '500' }}>Account Status:</span>
+                <span style={{ color: '#27ae60', fontWeight: '500' }}>✅ Active</span>
               </div>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* System Overview */}
+          <div className="dashboard-card">
+            <h3>System Overview</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{
+                padding: '1rem',
+                background: 'linear-gradient(135deg, rgba(52, 152, 219, 0.1), rgba(52, 152, 219, 0.05))',
+                borderRadius: '8px',
+                border: '1px solid rgba(52, 152, 219, 0.2)'
+              }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', color: '#3498db' }}>🌐 Network Status</h4>
+                <p style={{ margin: 0, fontSize: '0.875rem' }}>All systems operational</p>
+              </div>
+              
+              <div style={{
+                padding: '1rem',
+                background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(46, 204, 113, 0.05))',
+                borderRadius: '8px',
+                border: '1px solid rgba(46, 204, 113, 0.2)'
+              }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', color: '#27ae60' }}>💾 Database</h4>
+                <p style={{ margin: 0, fontSize: '0.875rem' }}>Supabase connected - 99.9% uptime</p>
+              </div>
+              
+              <div style={{
+                padding: '1rem',
+                background: 'linear-gradient(135deg, rgba(var(--dashboard-primary), 0.1), rgba(var(--dashboard-secondary), 0.05))',
+                borderRadius: '8px',
+                border: '1px solid rgba(var(--dashboard-primary), 0.2)'
+              }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--dashboard-primary)' }}>🔐 Security</h4>
+                <p style={{ margin: 0, fontSize: '0.875rem' }}>Universal authentication active</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
-}
+};
 
 export default Dashboard;

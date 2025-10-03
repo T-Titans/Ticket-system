@@ -1,75 +1,130 @@
-import express from 'express';
-import { body } from 'express-validator';
-import { register, login, getProfile, updateProfile } from '../controllers/authController.js';
-import { authenticateToken } from '../middleware/auth.js';
-
+const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const mysql = require('mysql2/promise');
 
-// Validation rules
-const registerValidation = [
-  body('firstName')
-    .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('First name must be between 2 and 50 characters'),
-  body('lastName')
-    .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Last name must be between 2 and 50 characters'),
-  body('email')
-    .isEmail()
-    .normalizeEmail()
-    .custom((value) => {
-      if (!value.toLowerCase().endsWith('@gmail.com')) {
-        throw new Error('Only Gmail addresses are allowed');
-      }
-      return true;
-    }),
-  body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
-  body('userType')
-    .isIn(['employee', 'it_specialist', 'visitor'])
-    .withMessage('Invalid user type'),
-  body('phoneNumber')
-    .isMobilePhone()
-    .withMessage('Invalid phone number format'),
-  body('employeeId')
-    .optional()
-    .isLength({ min: 3, max: 20 })
-    .withMessage('Employee ID must be between 3 and 20 characters')
-];
+// Database connection
+const getConnection = async () => {
+    return await mysql.createConnection({
+        host: process.env.DB_HOST || 'localhost',
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD || '',
+        database: process.env.DB_NAME || 'ticket_system'
+    });
+};
 
-const loginValidation = [
-  body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Valid email is required'),
-  body('password')
-    .notEmpty()
-    .withMessage('Password is required')
-];
+// Universal login function
+const loginUser = async (email, password) => {
+    try {
+        const connection = await getConnection();
+        
+        // First, try to find existing user
+        const [users] = await connection.execute(
+            'SELECT * FROM Users WHERE email = ? AND status = "active"',
+            [email]
+        );
+        
+        let user = users[0];
+        
+        // If user doesn't exist and it's a Gmail email, auto-create
+        if (!user && email.toLowerCase().endsWith('@gmail.com')) {
+            const emailParts = email.split('@')[0].split('.');
+            const firstName = emailParts[0] || 'Gmail';
+            const lastName = emailParts[1] || 'User';
+            
+            const hashedPassword = '$2a$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'; // 'password'
+            
+            const [result] = await connection.execute(`
+                INSERT INTO Users (
+                    firstName, lastName, email, password, phoneNumber,
+                    userType, role, department, status, emailVerified,
+                    permissions, allowUniversalLogin, isAutoCreated
+                ) VALUES (?, ?, ?, ?, '0000000000', 'employee', 'user', 'sales', 'active', TRUE, 
+                         '["ticket_create", "ticket_view_own"]', TRUE, TRUE)
+            `, [
+                firstName.charAt(0).toUpperCase() + firstName.slice(1),
+                lastName.charAt(0).toUpperCase() + lastName.slice(1),
+                email,
+                hashedPassword
+            ]);
+            
+            // Get the newly created user
+            const [newUsers] = await connection.execute(
+                'SELECT * FROM Users WHERE id = ?',
+                [result.insertId]
+            );
+            user = newUsers[0];
+        }
+        
+        await connection.end();
+        
+        if (!user) {
+            return { success: false, message: 'Invalid email or password' };
+        }
+        
+        // For universal login, accept any password
+        const passwordValid = user.allowUniversalLogin || await bcrypt.compare(password, user.password);
+        
+        if (!passwordValid) {
+            return { success: false, message: 'Invalid email or password' };
+        }
+        
+        // Generate JWT token
+        const token = jwt.sign(
+            { 
+                userId: user.id, 
+                email: user.email, 
+                role: user.role,
+                userType: user.userType 
+            },
+            process.env.JWT_SECRET || 'your-secret-key',
+            { expiresIn: '24h' }
+        );
+        
+        // Remove password from response
+        delete user.password;
+        
+        return {
+            success: true,
+            token,
+            user: {
+                ...user,
+                fullName: `${user.firstName} ${user.lastName}`
+            }
+        };
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        return { success: false, message: 'Login failed' };
+    }
+};
 
-const updateProfileValidation = [
-  body('firstName')
-    .optional()
-    .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('First name must be between 2 and 50 characters'),
-  body('lastName')
-    .optional()
-    .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Last name must be between 2 and 50 characters'),
-  body('phoneNumber')
-    .optional()
-    .isMobilePhone()
-    .withMessage('Invalid phone number format')
-];
+router.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+        return res.status(400).json({
+            success: false,
+            message: 'Email and password are required'
+        });
+    }
+    
+    const result = await loginUser(email, password);
+    
+    if (result.success) {
+        res.json({
+            success: true,
+            message: 'Login successful',
+            token: result.token,
+            user: result.user
+        });
+    } else {
+        res.status(401).json({
+            success: false,
+            message: result.message
+        });
+    }
+});
 
-// Routes
-router.post('/register', registerValidation, register);
-router.post('/login', loginValidation, login);
-router.get('/profile', authenticateToken, getProfile);
-router.put('/profile', authenticateToken, updateProfileValidation, updateProfile);
-
-export default router;
+module.exports = router;

@@ -1,137 +1,122 @@
-import { validationResult } from 'express-validator';
-import User from '../models/User.js';
-import { generateToken } from '../middleware/auth.js';
+﻿const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const supabase = require('../config/supabase');
 
-export const register = async (req, res) => {
+// Generate JWT Token
+const generateToken = (userId) => {
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+  });
+};
+
+// Register user
+const register = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    const { first_name, last_name, email, password, phone_number, role } = req.body;
+
+    // Validation
+    if (!first_name || !last_name || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Validation failed',
-        errors: errors.array()
+        message: 'Please provide all required fields'
       });
     }
 
-    const {
-      firstName,
-      lastName,
-      email,
-      password,
-      userType,
-      department,
-      deskNumber,
-      officeNumber,
-      phoneNumber,
-      employeeId
-    } = req.body;
+    // Check if user exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'User with this email already exists'
+        message: 'User already exists with this email'
       });
     }
 
-    // Check if employee ID exists (for non-visitors)
-    if (userType !== 'visitor' && employeeId) {
-      const existingEmployee = await User.findOne({ where: { employeeId } });
-      if (existingEmployee) {
-        return res.status(400).json({
-          success: false,
-          message: 'Employee ID already exists'
-        });
-      }
-    }
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create new user
-    const user = await User.create({
-      firstName,
-      lastName,
-      email: email.toLowerCase(),
-      password,
-      userType,
-      department: userType !== 'visitor' ? department : null,
-      deskNumber,
-      officeNumber,
-      phoneNumber,
-      employeeId: userType !== 'visitor' ? employeeId : null
-    });
+    // Create user
+    const { data: newUser, error } = await supabase
+      .from('users')
+      .insert([{
+        first_name,
+        last_name,
+        email,
+        password: hashedPassword,
+        phone_number: phone_number || null,
+        role: role || 'visitor'
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
 
     // Generate token
-    const token = generateToken(user.id);
+    const token = generateToken(newUser.id);
 
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
-      data: {
-        user: user.toJSON(),
-        token
+      token,
+      user: {
+        id: newUser.id,
+        first_name: newUser.first_name,
+        last_name: newUser.last_name,
+        email: newUser.email,
+        role: newUser.role,
+        phone_number: newUser.phone_number
       }
     });
-
   } catch (error) {
-    console.error('Registration error:', error);
-    
-    if (error.name === 'SequelizeValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors.map(err => ({
-          field: err.path,
-          message: err.message
-        }))
-      });
-    }
-
+    console.error(' Registration error:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Error registering user',
+      error: error.message
     });
   }
 };
 
-export const login = async (req, res) => {
+// Login user
+const login = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    const { email, password } = req.body;
+
+    // Validation
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Validation failed',
-        errors: errors.array()
+        message: 'Please provide email and password'
       });
     }
 
-    const { email, password, rememberMe } = req.body;
+    // Find user
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
 
-    // Find user by email
-    const user = await User.findOne({ 
-      where: { 
-        email: email.toLowerCase(),
-        isActive: true 
-      }
-    });
-
-    if (!user) {
+    if (error || !user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'Invalid credentials'
       });
     }
 
     // Check password
-    const isPasswordValid = await user.comparePassword(password);
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'Invalid credentials'
       });
     }
-
-    // Update last login
-    await user.update({ lastLogin: new Date() });
 
     // Generate token
     const token = generateToken(user.id);
@@ -139,78 +124,53 @@ export const login = async (req, res) => {
     res.json({
       success: true,
       message: 'Login successful',
-      data: {
-        user: user.toJSON(),
-        token
+      token,
+      user: {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        role: user.role,
+        phone_number: user.phone_number
       }
     });
-
   } catch (error) {
-    console.error('Login error:', error);
+    console.error(' Login error:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Error logging in',
+      error: error.message
     });
   }
 };
 
-export const getProfile = async (req, res) => {
+// Get current user
+const getCurrentUser = async (req, res) => {
   try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, first_name, last_name, email, role, phone_number, created_at')
+      .eq('id', req.user.id)
+      .single();
+
+    if (error) throw error;
+
     res.json({
       success: true,
-      data: {
-        user: req.user.toJSON()
-      }
+      user
     });
   } catch (error) {
-    console.error('Get profile error:', error);
+    console.error(' Error fetching user:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Error fetching user data',
+      error: error.message
     });
   }
 };
 
-export const updateProfile = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
-    const {
-      firstName,
-      lastName,
-      phoneNumber,
-      deskNumber,
-      officeNumber
-    } = req.body;
-
-    await req.user.update({
-      firstName,
-      lastName,
-      phoneNumber,
-      deskNumber,
-      officeNumber
-    });
-
-    res.json({
-      success: true,
-      message: 'Profile updated successfully',
-      data: {
-        user: req.user.toJSON()
-      }
-    });
-
-  } catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
+module.exports = {
+  register,
+  login,
+  getCurrentUser
 };

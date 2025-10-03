@@ -8,6 +8,7 @@ import { createAuditLog } from '../utils/auditLogger.js';
 import { exportToCsv } from '../utils/exportUtils.js';
 import csv from 'csv-parser';
 import fs from 'fs';
+import path from 'path';
 
 // GET /api/admin/users
 export const getUsers = async (req, res) => {
@@ -28,7 +29,9 @@ export const getUsers = async (req, res) => {
       ];
     }
     if (status && status !== 'all') where.status = status;
-    if (role && role !== 'all') where[Op.or] = [{ role }, { userType: role }];
+    if (role && role !== 'all') {
+      where[Op.or] = [{ role }, { userType: role }];
+    }
     if (department && department !== 'all') where.department = department;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -266,7 +269,9 @@ export const exportUsers = async (req, res) => {
 
     const where = { status: { [Op.ne]: 'deleted' } };
     if (filters.status && filters.status !== 'all') where.status = filters.status;
-    if (filters.role && filters.role !== 'all') where[Op.or] = [{ role: filters.role }, { userType: filters.role }];
+    if (filters.role && filters.role !== 'all') {
+      where[Op.or] = [{ role: filters.role }, { userType: filters.role }];
+    }
     if (filters.department && filters.department !== 'all') where.department = filters.department;
 
     const users = await User.findAll({
@@ -315,7 +320,7 @@ export const exportUsers = async (req, res) => {
   }
 };
 
-// POST /api/admin/users/import - THIS WAS MISSING!
+// POST /api/admin/users/import
 export const importUsers = async (req, res) => {
   try {
     if (!req.file) {
@@ -393,7 +398,9 @@ export const importUsers = async (req, res) => {
     }
 
     // Clean up uploaded file
-    fs.unlinkSync(filePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
 
     // Log the import
     await createAuditLog({
@@ -420,7 +427,7 @@ export const importUsers = async (req, res) => {
     console.error('Import users error:', error);
     
     // Clean up file if it exists
-    if (req.file && req.file.path) {
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
       try {
         fs.unlinkSync(req.file.path);
       } catch (cleanupError) {
@@ -432,7 +439,33 @@ export const importUsers = async (req, res) => {
   }
 };
 
-// Roles and Dashboard
+// Dashboard and roles functions
+export const getDashboardStats = async (req, res) => {
+  try {
+    const today = new Date(); 
+    today.setHours(0, 0, 0, 0);
+
+    const stats = {
+      totalUsers: await User.count({ where: { status: { [Op.ne]: 'deleted' } } }),
+      activeUsers: await User.count({ where: { status: 'active' } }),
+      pendingUsers: await User.count({ where: { status: 'pending' } }),
+      suspendedUsers: await User.count({ where: { status: 'suspended' } }),
+      todayLogins: await AuditLog.count({ where: { action: 'LOGIN', createdAt: { [Op.gte]: today } } }),
+      failedLogins: await AuditLog.count({ where: { action: 'FAILED_LOGIN', createdAt: { [Op.gte]: today } } }),
+      recentActivity: await AuditLog.findAll({
+        include: [{ model: User, attributes: ['firstName', 'lastName', 'email'] }],
+        order: [['createdAt', 'DESC']], 
+        limit: 10
+      })
+    };
+
+    res.json({ success: true, stats });
+  } catch (e) {
+    console.error('Get dashboard stats error:', e);
+    res.status(500).json({ success: false, message: 'Failed to fetch dashboard stats', error: e.message });
+  }
+};
+
 export const getRoles = async (req, res) => {
   try {
     const roles = [
@@ -450,31 +483,7 @@ export const getRoles = async (req, res) => {
   }
 };
 
-export const getDashboardStats = async (req, res) => {
-  try {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-
-    const stats = {
-      totalUsers: await User.count({ where: { status: { [Op.ne]: 'deleted' } } }),
-      activeUsers: await User.count({ where: { status: 'active' } }),
-      pendingUsers: await User.count({ where: { status: 'pending' } }),
-      suspendedUsers: await User.count({ where: { status: 'suspended' } }),
-      todayLogins: await AuditLog.count({ where: { action: 'LOGIN', createdAt: { [Op.gte]: today } } }),
-      failedLogins: await AuditLog.count({ where: { action: 'FAILED_LOGIN', createdAt: { [Op.gte]: today } } }),
-      recentActivity: await AuditLog.findAll({
-        include: [{ model: User, attributes: ['firstName', 'lastName', 'email'] }],
-        order: [['createdAt', 'DESC']], limit: 10
-      })
-    };
-
-    res.json({ success: true, stats });
-  } catch (e) {
-    console.error('Get dashboard stats error:', e);
-    res.status(500).json({ success: false, message: 'Failed to fetch dashboard stats', error: e.message });
-  }
-};
-
-// Stubs for not-yet-implemented endpoints
+// Stub functions for future implementation
 export const createRole = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });
 export const updateRole = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });
 export const deleteRole = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });
@@ -485,4 +494,7 @@ export const updateSecuritySettings = (req, res) => res.status(501).json({ succe
 export const getActiveSessions = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });
 export const terminateSession = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });
 export const getAuditLogs = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });
-export const getUserActivity = (req, res) => res.status(501).json({ success: false, message: 'Not
+export const getUserActivity = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });
+export const getSystemHealth = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });
+export const getSystemSettings = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });
+export const updateSystemSettings = (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' });

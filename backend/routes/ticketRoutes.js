@@ -1,20 +1,36 @@
-// directory: backend/routes
-// filename: ticketRoutes.js
-// filepath: c:\Users\MANDLENKOSI VUNDLA\Documents\ticket-system\backend\routes\ticketRoutes.js
-import express from 'express';
-import { authMiddleware } from '../middleware/authMiddleware.js';
-
+﻿const express = require('express');
 const router = express.Router();
+const {
+  getAllTickets,
+  getTicketById,
+  createTicket,
+  updateTicket,
+  assignTicket,
+  deleteTicket,
+  getTicketStats,
+  addComment,
+  getComments
+} = require('../controllers/ticketController');
+const { protect } = require('../middleware/authMiddleware');
 
-router.use(authMiddleware);
+// All routes are protected
+router.use(protect);
 
-// Placeholder routes for tickets
-router.get('/', (req, res) => {
-  res.json({ success: true, message: 'Tickets endpoint - not implemented yet' });
-});
+// Stats route (must be before /:id)
+router.get('/stats', getTicketStats);
 
-router.post('/', (req, res) => {
-  res.json({ success: true, message: 'Create ticket endpoint - not implemented yet' });
-});
+// Main CRUD routes
+router.get('/', getAllTickets);
+router.post('/', createTicket);
+router.get('/:id', getTicketById);
+router.put('/:id', updateTicket);
+router.delete('/:id', deleteTicket);
 
-export default router;
+// Assign ticket
+router.patch('/:id/assign', assignTicket);
+
+// Comments
+router.post('/:id/comments', addComment);
+router.get('/:id/comments', getComments);
+
+module.exports = router;

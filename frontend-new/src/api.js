@@ -1,4 +1,69 @@
-// ...existing code...
+import axios from 'axios';
+
+// API Configuration
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+
+// Create axios instance
+const API = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true
+});
+
+// Token management
+const TokenManager = {
+  getToken: () => localStorage.getItem('authToken'),
+  getRefreshToken: () => localStorage.getItem('refreshToken'),
+  setToken: (token) => localStorage.setItem('authToken', token),
+  setRefreshToken: (token) => localStorage.setItem('refreshToken', token),
+  clearTokens: () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+  }
+};
+
+// Request interceptor
+API.interceptors.request.use(
+  (config) => {
+    const token = TokenManager.getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor
+API.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        const refreshToken = TokenManager.getRefreshToken();
+        if (refreshToken) {
+          const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
+          TokenManager.setToken(data.token);
+          originalRequest.headers.Authorization = `Bearer ${data.token}`;
+          return API(originalRequest);
+        }
+      } catch (refreshError) {
+        TokenManager.clearTokens();
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+export { API, TokenManager };
 
 export const apiMethods = {
   // Authentication
@@ -6,8 +71,8 @@ export const apiMethods = {
     login: (credentials) => API.post('/auth/login', credentials),
     register: (userData) => API.post('/auth/register', userData),
     logout: () => API.post('/auth/logout'),
-    refreshToken: () => API.post('/auth/refresh', { 
-      refreshToken: TokenManager.getRefreshToken() 
+    refreshToken: () => API.post('/auth/refresh', {
+      refreshToken: TokenManager.getRefreshToken()
     }),
     resetPassword: (email) => API.post('/auth/reset-password', { email }),
     verifyAccount: (token) => API.post('/auth/verify', { token }),
@@ -38,45 +103,29 @@ export const apiMethods = {
     getDepartments: () => API.get('/users/departments'),
   },
 
-  // Admin-specific methods for UserManagement component
+  // Admin-specific methods
   admin: {
-    // User Management
     getUsers: (params = {}) => API.get('/admin/users', { params }),
     createUser: (userData) => API.post('/admin/users', userData),
     updateUser: (id, userData) => API.put(`/admin/users/${id}`, userData),
     deleteUser: (id) => API.delete(`/admin/users/${id}`),
     bulkUpdateUsers: (userIds, updateData) => API.patch('/admin/users/bulk-update', { userIds, updateData }),
     bulkDeleteUsers: (userIds) => API.delete('/admin/users/bulk-delete', { data: { userIds } }),
-    exportUsers: (params = {}) => API.get('/admin/users/export', { 
-      params,
-      responseType: 'blob'
-    }),
-    importUsers: (formData) => API.post('/admin/users/import', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    }),
-    
-    // Role Management
+    exportUsers: (params = {}) => API.get('/admin/users/export', { params, responseType: 'blob' }),
+    importUsers: (formData) => API.post('/admin/users/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
     getRoles: () => API.get('/admin/roles'),
     createRole: (roleData) => API.post('/admin/roles', roleData),
     updateRole: (id, roleData) => API.put(`/admin/roles/${id}`, roleData),
     deleteRole: (id) => API.delete(`/admin/roles/${id}`),
-    
-    // Permission Management
     getPermissions: () => API.get('/admin/permissions'),
     updateUserPermissions: (userId, permissions) => API.put(`/admin/users/${userId}/permissions`, { permissions }),
-    
-    // Security & Audit
     getSecuritySettings: () => API.get('/admin/security/settings'),
     updateSecuritySettings: (settings) => API.put('/admin/security/settings', settings),
     getActiveSessions: () => API.get('/admin/security/sessions'),
     terminateSession: (sessionId) => API.delete(`/admin/security/sessions/${sessionId}`),
     getAuditLogs: (params = {}) => API.get('/admin/audit/logs', { params }),
-    
-    // Dashboard Stats
     getDashboardStats: () => API.get('/admin/dashboard/stats'),
     getUserActivity: (params = {}) => API.get('/admin/users/activity', { params }),
-    
-    // System Management
     getSystemHealth: () => API.get('/admin/system/health'),
     getSystemSettings: () => API.get('/admin/system/settings'),
     updateSystemSettings: (settings) => API.put('/admin/system/settings', settings),
@@ -86,10 +135,7 @@ export const apiMethods = {
   analytics: {
     getDashboard: () => API.get('/analytics/dashboard'),
     getReports: (params = {}) => API.get('/analytics/reports', { params }),
-    exportData: (format, params = {}) => API.get(`/analytics/export/${format}`, { 
-      params,
-      responseType: 'blob'
-    }),
+    exportData: (format, params = {}) => API.get(`/analytics/export/${format}`, { params, responseType: 'blob' }),
   },
 
   // Chat
@@ -111,4 +157,4 @@ export const apiMethods = {
   }
 };
 
-// ...existing code...
+export default apiMethods;

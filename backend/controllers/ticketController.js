@@ -1,387 +1,392 @@
-import { validationResult } from 'express-validator';
-import { Ticket, User } from '../models/index.js';
-import { Op } from 'sequelize';
+﻿const supabase = require('../config/supabase');
 
-export const createTicket = async (req, res) => {
+// Get all tickets with filters
+const getAllTickets = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
+    const { status, priority, category, assigned_to, created_by } = req.query;
+
+    let query = supabase
+      .from('tickets')
+      .select(`
+        *,
+        creator:created_by(id, first_name, last_name, email, role),
+        assignee:assigned_to(id, first_name, last_name, email, role)
+      `)
+      .order('created_at', { ascending: false });
+
+    // Apply filters
+    if (status) {
+      query = query.eq('status', status);
+    }
+    if (priority) {
+      query = query.eq('priority', priority);
+    }
+    if (category) {
+      query = query.eq('category', category);
+    }
+    if (assigned_to) {
+      query = query.eq('assigned_to', assigned_to);
+    }
+    if (created_by) {
+      query = query.eq('created_by', created_by);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      tickets: data,
+      count: data.length
+    });
+  } catch (error) {
+    console.error(' Error fetching tickets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch tickets',
+      error: error.message
+    });
+  }
+};
+
+// Get ticket by ID
+const getTicketById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .select(`
+        *,
+        creator:created_by(id, first_name, last_name, email, role),
+        assignee:assigned_to(id, first_name, last_name, email, role)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+
+    if (!data) {
+      return res.status(404).json({
         success: false,
-        message: 'Validation failed',
-        errors: errors.array()
+        message: 'Ticket not found'
       });
     }
 
-    const {
-      title,
-      description,
-      category,
-      subcategory,
-      priority = 'Medium',
-      urgency = 'Medium',
-      impact = 'Medium',
-      assetTag,
-      location
-    } = req.body;
-
-    const ticket = await Ticket.create({
-      title,
-      description,
-      category,
-      subcategory,
-      priority,
-      urgency,
-      impact,
-      requesterId: req.user.id,
-      assetTag,
-      location: location || `${req.user.deskNumber} - ${req.user.department}`
+    res.json({
+      success: true,
+      ticket: data
     });
-
-    // Fetch the created ticket with associations
-    const createdTicket = await Ticket.findByPk(ticket.id, {
-      include: [
-        { model: User, as: 'requester', attributes: ['id', 'firstName', 'lastName', 'email', 'department'] },
-        { model: User, as: 'assignedTo', attributes: ['id', 'firstName', 'lastName', 'email'] }
-      ]
+  } catch (error) {
+    console.error(' Error fetching ticket:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch ticket',
+      error: error.message
     });
+  }
+};
+
+// Create ticket
+const createTicket = async (req, res) => {
+  try {
+    const { title, description, category, priority, created_by } = req.body;
+
+    // Validation
+    if (!title || !description || !category || !priority || !created_by) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields'
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .insert([{
+        title,
+        description,
+        category,
+        priority,
+        created_by,
+        status: 'open'
+      }])
+      .select(`
+        *,
+        creator:created_by(id, first_name, last_name, email, role)
+      `)
+      .single();
+
+    if (error) throw error;
 
     res.status(201).json({
       success: true,
       message: 'Ticket created successfully',
-      data: { ticket: createdTicket }
+      ticket: data
     });
-
   } catch (error) {
-    console.error('Create ticket error:', error);
+    console.error(' Error creating ticket:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Failed to create ticket',
+      error: error.message
     });
   }
 };
 
-export const getTickets = async (req, res) => {
-  try {
-    const {
-      page = 1,
-      limit = 10,
-      status,
-      category,
-      priority,
-      assignedTo,
-      requester
-    } = req.query;
-
-    const offset = (page - 1) * limit;
-    const where = {};
-
-    // Build filter conditions
-    if (status) where.status = status;
-    if (category) where.category = category;
-    if (priority) where.priority = priority;
-    if (assignedTo) where.assignedToId = assignedTo;
-    if (requester) where.requesterId = requester;
-
-    // If user is not IT specialist, only show their tickets
-    if (req.user.userType !== 'it_specialist' && req.user.userType !== 'admin') {
-      where.requesterId = req.user.id;
-    }
-
-    const { rows: tickets, count: total } = await Ticket.findAndCountAll({
-      where,
-      include: [
-        { model: User, as: 'requester', attributes: ['id', 'firstName', 'lastName', 'email', 'department'] },
-        { model: User, as: 'assignedTo', attributes: ['id', 'firstName', 'lastName', 'email'] }
-      ],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: offset
-    });
-
-    res.json({
-      success: true,
-      data: {
-        tickets,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(total / limit),
-          totalItems: total,
-          itemsPerPage: parseInt(limit)
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error('Get tickets error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-};
-
-export const getTicketById = async (req, res) => {
+// Update ticket
+const updateTicket = async (req, res) => {
   try {
     const { id } = req.params;
+    const updates = req.body;
 
-    const ticket = await Ticket.findByPk(id, {
-      include: [
-        { model: User, as: 'requester', attributes: ['id', 'firstName', 'lastName', 'email', 'department', 'deskNumber'] },
-        { model: User, as: 'assignedTo', attributes: ['id', 'firstName', 'lastName', 'email'] }
-      ]
-    });
+    // Remove fields that shouldn't be updated directly
+    delete updates.id;
+    delete updates.created_by;
+    delete updates.created_at;
 
-    if (!ticket) {
-      return res.status(404).json({
-        success: false,
-        message: 'Ticket not found'
-      });
-    }
+    const { data, error } = await supabase
+      .from('tickets')
+      .update(updates)
+      .eq('id', id)
+      .select(`
+        *,
+        creator:created_by(id, first_name, last_name, email, role),
+        assignee:assigned_to(id, first_name, last_name, email, role)
+      `)
+      .single();
 
-    // Check permissions
-    if (req.user.userType !== 'it_specialist' && 
-        req.user.userType !== 'admin' && 
-        ticket.requesterId !== req.user.id && 
-        ticket.assignedToId !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: { ticket }
-    });
-
-  } catch (error) {
-    console.error('Get ticket error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-};
-
-export const updateTicket = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const {
-      title,
-      description,
-      category,
-      subcategory,
-      priority,
-      status,
-      resolutionNotes
-    } = req.body;
-
-    const ticket = await Ticket.findByPk(id);
-
-    if (!ticket) {
-      return res.status(404).json({
-        success: false,
-        message: 'Ticket not found'
-      });
-    }
-
-    // Check permissions
-    if (req.user.userType !== 'it_specialist' && 
-        req.user.userType !== 'admin' && 
-        ticket.requesterId !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
-      });
-    }
-
-    const updateData = {
-      title,
-      description,
-      category,
-      subcategory,
-      priority,
-      status,
-      resolutionNotes
-    };
-
-    // Set resolution time if ticket is being resolved
-    if (status === 'Resolved' && ticket.status !== 'Resolved') {
-      updateData.actualResolutionTime = new Date();
-    }
-
-    await ticket.update(updateData);
-
-    const updatedTicket = await Ticket.findByPk(id, {
-      include: [
-        { model: User, as: 'requester', attributes: ['id', 'firstName', 'lastName', 'email', 'department'] },
-        { model: User, as: 'assignedTo', attributes: ['id', 'firstName', 'lastName', 'email'] }
-      ]
-    });
+    if (error) throw error;
 
     res.json({
       success: true,
       message: 'Ticket updated successfully',
-      data: { ticket: updatedTicket }
+      ticket: data
     });
-
   } catch (error) {
-    console.error('Update ticket error:', error);
+    console.error(' Error updating ticket:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Failed to update ticket',
+      error: error.message
     });
   }
 };
 
-export const deleteTicket = async (req, res) => {
+// Assign ticket
+const assignTicket = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assigned_to } = req.body;
+
+    if (!assigned_to) {
+      return res.status(400).json({
+        success: false,
+        message: 'assigned_to is required'
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .update({ 
+        assigned_to,
+        status: 'in_progress'
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        creator:created_by(id, first_name, last_name, email, role),
+        assignee:assigned_to(id, first_name, last_name, email, role)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Ticket assigned successfully',
+      ticket: data
+    });
+  } catch (error) {
+    console.error(' Error assigning ticket:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to assign ticket',
+      error: error.message
+    });
+  }
+};
+
+// Delete ticket
+const deleteTicket = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const ticket = await Ticket.findByPk(id);
+    // First delete comments
+    await supabase
+      .from('ticket_comments')
+      .delete()
+      .eq('ticket_id', id);
 
-    if (!ticket) {
-      return res.status(404).json({
-        success: false,
-        message: 'Ticket not found'
-      });
-    }
+    // Then delete ticket
+    const { error } = await supabase
+      .from('tickets')
+      .delete()
+      .eq('id', id);
 
-    // Only ticket creator or admin can delete
-    if (ticket.requesterId !== req.user.id && req.user.userType !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
-      });
-    }
-
-    await ticket.destroy();
+    if (error) throw error;
 
     res.json({
       success: true,
       message: 'Ticket deleted successfully'
     });
-
   } catch (error) {
-    console.error('Delete ticket error:', error);
+    console.error(' Error deleting ticket:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Failed to delete ticket',
+      error: error.message
     });
   }
 };
 
-export const assignTicket = async (req, res) => {
+// Get ticket statistics
+const getTicketStats = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { assignedToId } = req.body;
+    const { user_id, role } = req.query;
 
-    // Only IT specialists and admins can assign tickets
-    if (req.user.userType !== 'it_specialist' && req.user.userType !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
-      });
+    let query = supabase.from('tickets').select('*');
+
+    // Filter based on role
+    if (role === 'employee' && user_id) {
+      query = query.eq('assigned_to', user_id);
+    } else if (role === 'visitor' && user_id) {
+      query = query.eq('created_by', user_id);
     }
 
-    const ticket = await Ticket.findByPk(id);
+    const { data, error } = await query;
 
-    if (!ticket) {
-      return res.status(404).json({
-        success: false,
-        message: 'Ticket not found'
-      });
-    }
+    if (error) throw error;
 
-    // Verify assignee is IT specialist
-    if (assignedToId) {
-      const assignee = await User.findByPk(assignedToId);
-      if (!assignee || (assignee.userType !== 'it_specialist' && assignee.userType !== 'admin')) {
-        return res.status(400).json({
-          success: false,
-          message: 'Can only assign tickets to IT specialists'
-        });
+    // Calculate stats
+    const stats = {
+      total: data.length,
+      byStatus: {
+        open: data.filter(t => t.status === 'open').length,
+        in_progress: data.filter(t => t.status === 'in_progress').length,
+        resolved: data.filter(t => t.status === 'resolved').length,
+        closed: data.filter(t => t.status === 'closed').length
+      },
+      byPriority: {
+        low: data.filter(t => t.priority === 'low').length,
+        medium: data.filter(t => t.priority === 'medium').length,
+        high: data.filter(t => t.priority === 'high').length,
+        urgent: data.filter(t => t.priority === 'urgent').length
+      },
+      byCategory: {
+        hardware: data.filter(t => t.category === 'hardware').length,
+        software: data.filter(t => t.category === 'software').length,
+        network: data.filter(t => t.category === 'network').length,
+        access: data.filter(t => t.category === 'access').length,
+        other: data.filter(t => t.category === 'other').length
       }
-    }
-
-    await ticket.update({
-      assignedToId: assignedToId || null,
-      status: assignedToId ? 'In Progress' : 'Open'
-    });
-
-    const updatedTicket = await Ticket.findByPk(id, {
-      include: [
-        { model: User, as: 'requester', attributes: ['id', 'firstName', 'lastName', 'email', 'department'] },
-        { model: User, as: 'assignedTo', attributes: ['id', 'firstName', 'lastName', 'email'] }
-      ]
-    });
+    };
 
     res.json({
       success: true,
-      message: 'Ticket assigned successfully',
-      data: { ticket: updatedTicket }
+      stats
     });
-
   } catch (error) {
-    console.error('Assign ticket error:', error);
+    console.error(' Error getting ticket stats:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Failed to get ticket statistics',
+      error: error.message
     });
   }
 };
 
-export const closeTicket = async (req, res) => {
+// Add comment to ticket
+const addComment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { resolutionNotes, satisfactionRating, feedbackComments } = req.body;
+    const { user_id, comment } = req.body;
 
-    const ticket = await Ticket.findByPk(id);
-
-    if (!ticket) {
-      return res.status(404).json({
+    if (!user_id || !comment) {
+      return res.status(400).json({
         success: false,
-        message: 'Ticket not found'
+        message: 'user_id and comment are required'
       });
     }
 
-    // Check permissions
-    if (req.user.userType !== 'it_specialist' && 
-        req.user.userType !== 'admin' && 
-        ticket.requesterId !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
-      });
-    }
+    const { data, error } = await supabase
+      .from('ticket_comments')
+      .insert([{
+        ticket_id: id,
+        user_id,
+        comment
+      }])
+      .select(`
+        *,
+        user:user_id(id, first_name, last_name, email)
+      `)
+      .single();
 
-    await ticket.update({
-      status: 'Closed',
-      resolutionNotes,
-      satisfactionRating,
-      feedbackComments,
-      actualResolutionTime: ticket.actualResolutionTime || new Date()
-    });
+    if (error) throw error;
 
-    const updatedTicket = await Ticket.findByPk(id, {
-      include: [
-        { model: User, as: 'requester', attributes: ['id', 'firstName', 'lastName', 'email', 'department'] },
-        { model: User, as: 'assignedTo', attributes: ['id', 'firstName', 'lastName', 'email'] }
-      ]
+    res.status(201).json({
+      success: true,
+      message: 'Comment added successfully',
+      comment: data
     });
+  } catch (error) {
+    console.error(' Error adding comment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add comment',
+      error: error.message
+    });
+  }
+};
+
+// Get comments for ticket
+const getComments = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('ticket_comments')
+      .select(`
+        *,
+        user:user_id(id, first_name, last_name, email)
+      `)
+      .eq('ticket_id', id)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
 
     res.json({
       success: true,
-      message: 'Ticket closed successfully',
-      data: { ticket: updatedTicket }
+      comments: data
     });
-
   } catch (error) {
-    console.error('Close ticket error:', error);
+    console.error(' Error fetching comments:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Failed to fetch comments',
+      error: error.message
     });
   }
+};
+
+module.exports = {
+  getAllTickets,
+  getTicketById,
+  createTicket,
+  updateTicket,
+  assignTicket,
+  deleteTicket,
+  getTicketStats,
+  addComment,
+  getComments
 };

@@ -1,0 +1,11 @@
+/* Place only CSS rules here. Remove Tailwind config JS code from this file. *//** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
