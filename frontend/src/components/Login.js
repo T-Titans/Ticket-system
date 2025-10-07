@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+import api from '../api';  // This should use the correct base URL
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -14,18 +12,12 @@ const Login = () => {
     e.preventDefault();
     setError('');
     console.log('🔴 LOGIN FORM SUBMITTED');
-    
+
     try {
-      console.log('🟡 Sending login request to:', `${API_URL}/api/auth/login`);
-      
-      // ✅ FIX: Use the API_URL variable here
-      const res = await axios.post(`${API_URL}/api/auth/login`, { 
-        email, 
-        password 
-      });
-      
+      // Remove '/api' from the URL since your api.js baseURL should include it
+      const res = await api.post('/auth/login', { email, password });
       console.log('🟢 Login successful:', res.data);
-      
+
       const token = res.data.token;
       if (token) {
         localStorage.setItem('token', token);
@@ -37,23 +29,31 @@ const Login = () => {
       }
     } catch (err) {
       console.error('🔴 FULL Login error:', err);
-      console.error('🔴 Error response:', err.response);
       
-      const errorMessage = err.response?.data?.message || err.message || 'Login failed';
+      // Enhanced error handling for network issues
+      let errorMessage = 'Login failed';
+      if (err.code === 'NETWORK_ERROR' || err.message.includes('Network Error')) {
+        errorMessage = 'Cannot connect to server. Please check if backend is running on port 5000.';
+      } else if (err.response?.status === 404) {
+        errorMessage = 'Server endpoint not found. Check your API URL.';
+      } else {
+        errorMessage = err.response?.data?.message || err.message || 'Login failed';
+      }
       setError(errorMessage);
     }
   };
 
+  // Your layout remains exactly the same ↓
   return (
     <div className="auth-page">
       <form className="card auth-card" onSubmit={handleSubmit}>
         <h2>Login</h2>
-        
+
         {error && (
-          <div style={{ 
-            color: 'red', 
-            backgroundColor: '#ffe6e6', 
-            padding: '10px', 
+          <div style={{
+            color: 'red',
+            backgroundColor: '#ffe6e6',
+            padding: '10px',
             borderRadius: '5px',
             marginBottom: '15px',
             border: '1px solid red'
@@ -61,7 +61,7 @@ const Login = () => {
             Error: {error}
           </div>
         )}
-        
+
         <input
           placeholder="Email"
           value={email}
