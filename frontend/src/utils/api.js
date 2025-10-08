@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_URL = process.env.REACT_APP_API_URL || "https://ticket-system-35ma.onrender.com/api";
 
 const api = axios.create({
   baseURL: API_URL,
