@@ -1,65 +1,92 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import TicketForm from '../components/TicketForm';
+import TicketList from '../components/TicketList';
 
-function Dashboard() {
-  const [tickets, setTickets] = useState([]);
+const Dashboard = () => {
+  const [refreshTickets, setRefreshTickets] = useState(0);
+  const [activeTab, setActiveTab] = useState('create');
+  const userRole = localStorage.getItem('role') || 'user';
+  const userName = localStorage.getItem('userName') || 'User';
 
-  useEffect(() => {
-    // Example fetch: replace with your backend API
-    fetch('/api/tickets')
-      .then(res => res.json())
-      .then(data => setTickets(data))
-      .catch(err => console.error('Error fetching tickets:', err));
-  }, []);
+  const handleTicketCreated = () => {
+    setRefreshTickets(prev => prev + 1);
+    setActiveTab('tickets');
+  };
+
+  const getWelcomeMessage = () => {
+    switch(userRole) {
+      case 'support':
+        return '🔧 Support Agent Dashboard';
+      case 'admin':
+        return '👑 Admin Dashboard';
+      default:
+        return '🎫 User Dashboard';
+    }
+  };
+
+  const getDescription = () => {
+    switch(userRole) {
+      case 'support':
+        return 'Manage and resolve all tickets in the system';
+      case 'admin':
+        return 'Full system access and management';
+      default:
+        return 'Create and track your support tickets';
+    }
+  };
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Ticket Dashboard</h1>
-
-      <table className="min-w-full bg-white border border-gray-300">
-        <thead>
-          <tr>
-            <th className="px-4 py-2 border-b">Title</th>
-            <th className="px-4 py-2 border-b">Description</th>
-            <th className="px-4 py-2 border-b">Category</th>
-            <th className="px-4 py-2 border-b">Priority</th>
-            <th className="px-4 py-2 border-b">Status</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {tickets.length === 0 ? (
-            <tr>
-              <td colSpan="5" className="text-center py-4">
-                No tickets found.
-              </td>
-            </tr>
-          ) : (
-            tickets.map(ticket => (
-              <tr key={ticket._id} className="hover:bg-gray-100">
-                <td className="px-4 py-2 border-b">{ticket.title}</td>
-                <td className="px-4 py-2 border-b">{ticket.description}</td>
-                <td className="px-4 py-2 border-b">{ticket.category}</td>
-                <td className="px-4 py-2 border-b">
-                  <span
-                    className={`px-2 py-1 rounded ${
-                      ticket.priority === 'high'
-                        ? 'bg-red-500 text-white'
-                        : ticket.priority === 'medium'
-                        ? 'bg-yellow-400 text-black'
-                        : 'bg-green-500 text-white'
-                    }`}
-                  >
-                    {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
-                  </span>
-                </td>
-                <td className="px-4 py-2 border-b">{ticket.status}</td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+    <div className="dashboard">
+      <div className="dashboard-header">
+        <h1>Welcome back, {userName}!</h1>
+        <h2>{getWelcomeMessage()}</h2>
+        <p>{getDescription()}</p>
+      </div>
+      
+      {/* Tab Navigation - Only show create tab for regular users */}
+      <div className="dashboard-tabs">
+        {userRole === 'user' && (
+          <button 
+            className={`tab-button ${activeTab === 'create' ? 'active' : ''}`}
+            onClick={() => setActiveTab('create')}
+          >
+            🎫 Create Ticket
+          </button>
+        )}
+        <button 
+          className={`tab-button ${activeTab === 'tickets' ? 'active' : ''}`}
+          onClick={() => setActiveTab('tickets')}
+        >
+          📋 {userRole === 'user' ? 'My Tickets' : 'All Tickets'}
+        </button>
+      </div>
+      
+      {/* Tab Content */}
+      <div className="dashboard-content">
+        {activeTab === 'create' && userRole === 'user' && (
+          <div className="dashboard-section">
+            <TicketForm onTicketCreated={handleTicketCreated} />
+          </div>
+        )}
+        
+        {activeTab === 'tickets' && (
+          <div className="dashboard-section">
+            <TicketList refresh={refreshTickets} />
+          </div>
+        )}
+        
+        {/* Show message if support/admin tries to create ticket */}
+        {activeTab === 'create' && userRole !== 'user' && (
+          <div className="dashboard-section">
+            <div className="card">
+              <h3>Ticket Creation</h3>
+              <p>As a {userRole}, you don't create tickets. Use the "{userRole === 'user' ? 'My Tickets' : 'All Tickets'}" tab to manage existing tickets.</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
-}
+};
 
 export default Dashboard;
